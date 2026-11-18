@@ -35,7 +35,6 @@ CSV export is not included in this version.
 
 ## Project structure
 
-```text
 Expense-Tracker/
 ├── main.py                  # Application entry point
 ├── expense_tracker.py       # Tkinter interface and event handlers
@@ -45,7 +44,6 @@ Expense-Tracker/
 ├── test_expense_tracker.py  # Automated tests
 ├── .gitignore
 └── README.md
-```
 
 ## Requirements
 
@@ -59,9 +57,7 @@ No third-party Python packages are required.
 
 Open a terminal in the project directory and run:
 
-```bash
 python main.py
-```
 
 On first launch, the application creates `expenses.db` and the required tables
 beside the Python source files. The database starts empty; sample records are
@@ -72,19 +68,15 @@ not inserted automatically.
 To populate a new or empty database with sample student expenses and a sample
 monthly budget, run:
 
-```bash
 python seed_data.py
 python main.py
-```
 
 The seed script will not add duplicate sample records when expenses already
 exist. The sample dates are generated for the current month.
 
 ## Run automated tests
 
-```bash
 python -m unittest -v
-```
 
 The tests use temporary SQLite databases and do not modify the application's
 `expenses.db`.
