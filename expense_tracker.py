@@ -7,169 +7,14 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-import sqlite3
-from datetime import datetime, date
+from datetime import date
 
-# Database file name
-DB_NAME = "expenses.db"
-
-
-# ------------------------------------------------------------------------------
-# 1. DATABASE FUNCTIONS (SQLite)
-# ------------------------------------------------------------------------------
-
-def init_database():
-    """Create expenses and budget tables if they do not exist."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    # Table to store individual expenses
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            amount REAL NOT NULL,
-            category TEXT NOT NULL,
-            description TEXT,
-            date TEXT NOT NULL
-        )
-    """)
-
-    # Table to store monthly budget (format: YYYY-MM)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS budgets (
-            month TEXT PRIMARY KEY,
-            budget_amount REAL NOT NULL
-        )
-    """)
-
-    conn.commit()
-
-    # Add a few default sample student expenses if table is completely empty
-    cursor.execute("SELECT COUNT(*) FROM expenses")
-    count = cursor.fetchone()[0]
-    if count == 0:
-        sample_data = [
-            (120.0, "Food & Canteen", "Lunch at college canteen", "2026-11-02"),
-            (450.0, "Books & Stationery", "Notebooks and pens", "2026-11-05"),
-            (50.0, "Travel & Bus", "Bus fare to university", "2026-11-07"),
-            (3500.0, "Hostel & Rent", "Hostel room sharing", "2026-11-10"),
-            (250.0, "Food & Canteen", "Evening snacks with friends", "2026-11-12"),
-            (800.0, "Course Fees", "Online Python workshop", "2026-11-15"),
-        ]
-        cursor.executemany("""
-            INSERT INTO expenses (amount, category, description, date)
-            VALUES (?, ?, ?, ?)
-        """, sample_data)
-
-        # Set default budget for demo
-        cursor.execute("INSERT OR REPLACE INTO budgets (month, budget_amount) VALUES (?, ?)", ("2026-11", 6000.0))
-        conn.commit()
-
-    conn.close()
-
-
-def add_expense_to_db(amount, category, description, expense_date):
-    """Insert a new expense row into the database."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO expenses (amount, category, description, date)
-        VALUES (?, ?, ?, ?)
-    """, (amount, category, description, expense_date))
-    conn.commit()
-    conn.close()
-
-
-def fetch_expenses(selected_month=None):
-    """
-    Fetch expenses from the database.
-    If a month is selected, filter by that month (e.g. '2026-11').
-    Returns list of rows as tuples: (id, amount, category, description, date).
-    """
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    if selected_month and selected_month != "All":
-        cursor.execute("""
-            SELECT id, amount, category, description, date 
-            FROM expenses 
-            WHERE strftime('%Y-%m', date) = ?
-            ORDER BY date DESC, id DESC
-        """, (selected_month,))
-    else:
-        cursor.execute("""
-            SELECT id, amount, category, description, date 
-            FROM expenses 
-            ORDER BY date DESC, id DESC
-        """)
-
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
-
-
-def update_expense_in_db(expense_id, amount, category, description, expense_date):
-    """Update an existing expense in the database."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE expenses
-        SET amount = ?, category = ?, description = ?, date = ?
-        WHERE id = ?
-    """, (amount, category, description, expense_date, expense_id))
-    conn.commit()
-    conn.close()
-
-
-def delete_expense_from_db(expense_id):
-    """Delete an expense record by its ID."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
-    conn.commit()
-    conn.close()
-
-
-def save_budget_to_db(month, budget_amount):
-    """Save or update monthly budget in SQLite."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO budgets (month, budget_amount)
-        VALUES (?, ?)
-        ON CONFLICT(month) DO UPDATE SET budget_amount = excluded.budget_amount
-    """, (month, budget_amount))
-    conn.commit()
-    conn.close()
-
-
-def get_budget_from_db(month):
-    """Retrieve monthly budget amount from database."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT budget_amount FROM budgets WHERE month = ?", (month,))
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else 0.0
-
-
-def get_available_months():
-    """Get all unique months present in expenses and budget."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT DISTINCT strftime('%Y-%m', date) FROM expenses WHERE date IS NOT NULL
-        UNION
-        SELECT month FROM budgets
-        ORDER BY 1 DESC
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return [r[0] for r in rows if r[0]]
+import calculations as calc
+import database as db
 
 
 # ------------------------------------------------------------------------------
-# 2. GUI APPLICATION (Tkinter Widgets, Dictionaries, Calculations, & Exception Handling)
+# GUI APPLICATION (Tkinter Widgets and Event Handling)
 # ------------------------------------------------------------------------------
 
 class ExpenseTrackerApp:
@@ -182,20 +27,15 @@ class ExpenseTrackerApp:
         # Track which expense ID is currently being edited (None if adding new)
         self.selected_expense_id = None
 
-        # Pre-defined student categories
-        self.categories = [
-            "Food & Canteen",
-            "Books & Stationery",
-            "Hostel & Rent",
-            "Travel & Bus",
-            "Course Fees",
-            "Entertainment",
-            "Personal & Medical",
-            "Other"
-        ]
+        # Categories are shared with the optional demonstration data.
+        self.categories = list(calc.EXPENSE_CATEGORIES)
 
-        # Initialize SQLite database
-        init_database()
+        # Initialize the SQLite schema. The first run starts with no sample
+        # expenses; seed_data.py can populate a demonstration database.
+        db.init_db()
+
+        # Apply a predictable cross-platform style to colored buttons.
+        self._configure_styles()
 
         # Build user interface
         self.create_gui()
@@ -203,6 +43,80 @@ class ExpenseTrackerApp:
         # Load initial data
         self.update_month_dropdown()
         self.load_expenses_and_totals()
+
+    def _configure_styles(self):
+        """Configure consistent button colors across supported platforms."""
+        self.style = ttk.Style(self.root)
+
+        # Aqua on macOS does not expose all button color options. The clam
+        # theme supports explicit colors and is available with standard Tk.
+        try:
+            if "clam" in self.style.theme_names():
+                self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.style.configure(
+            "Primary.TButton",
+            background="#27ae60",
+            foreground="#ffffff",
+            font=("Arial", 9, "bold"),
+            padding=(10, 6),
+            borderwidth=0,
+        )
+        self.style.map(
+            "Primary.TButton",
+            background=[("pressed", "#1e8449"), ("active", "#229954")],
+            foreground=[("disabled", "#ecf0f1"), ("!disabled", "#ffffff")],
+        )
+        self.style.configure(
+            "Secondary.TButton",
+            background="#bdc3c7",
+            foreground="#2c3e50",
+            font=("Arial", 9),
+            padding=(9, 6),
+        )
+        self.style.map(
+            "Secondary.TButton",
+            background=[("pressed", "#aeb6bf"), ("active", "#d5d8dc")],
+        )
+        self.style.configure(
+            "Warning.TButton",
+            background="#f39c12",
+            foreground="#ffffff",
+            font=("Arial", 9, "bold"),
+            padding=(9, 6),
+        )
+        self.style.map(
+            "Warning.TButton",
+            background=[("pressed", "#d68910"), ("active", "#e67e22")],
+            foreground=[("!disabled", "#ffffff")],
+        )
+        self.style.configure(
+            "Danger.TButton",
+            background="#e74c3c",
+            foreground="#ffffff",
+            font=("Arial", 9, "bold"),
+            padding=(9, 6),
+        )
+        self.style.map(
+            "Danger.TButton",
+            background=[("pressed", "#c0392b"), ("active", "#cb4335")],
+            foreground=[("!disabled", "#ffffff")],
+        )
+        self.style.configure(
+            "Info.TButton",
+            background="#2980b9",
+            foreground="#ffffff",
+            font=("Arial", 9, "bold"),
+            padding=(9, 5),
+        )
+        self.style.map(
+            "Info.TButton",
+            background=[("pressed", "#21618c"), ("active", "#2471a3")],
+            foreground=[("!disabled", "#ffffff")],
+        )
+
 
     def create_gui(self):
         # 1. Header Title Banner
@@ -274,23 +188,19 @@ class ExpenseTrackerApp:
         btn_box = tk.Frame(self.form_frame)
         btn_box.grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=(10, 0))
 
-        self.submit_btn = tk.Button(
+        self.submit_btn = ttk.Button(
             btn_box,
             text="Add Expense",
-            bg="#27ae60",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            relief=tk.RAISED,
-            command=self.save_expense
+            style="Primary.TButton",
+            command=self.save_expense,
         )
         self.submit_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        self.clear_btn = tk.Button(
+        self.clear_btn = ttk.Button(
             btn_box,
             text="Clear",
-            bg="#bdc3c7",
-            font=("Arial", 9),
-            command=self.reset_form
+            style="Secondary.TButton",
+            command=self.reset_form,
         )
         self.clear_btn.pack(side=tk.RIGHT)
 
@@ -307,13 +217,11 @@ class ExpenseTrackerApp:
         self.budget_entry = ttk.Entry(b_input_box, width=12, font=("Arial", 9))
         self.budget_entry.pack(side=tk.LEFT, padx=6)
 
-        save_budget_btn = tk.Button(
+        save_budget_btn = ttk.Button(
             b_input_box,
             text="Save Budget",
-            bg="#2980b9",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            command=self.save_budget
+            style="Info.TButton",
+            command=self.save_budget,
         )
         save_budget_btn.pack(side=tk.LEFT)
 
@@ -398,23 +306,19 @@ class ExpenseTrackerApp:
         action_bar = tk.Frame(right_panel, pady=6)
         action_bar.pack(fill=tk.X)
 
-        edit_btn = tk.Button(
+        edit_btn = ttk.Button(
             action_bar,
             text="Edit Selected",
-            bg="#f39c12",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            command=self.start_edit_expense
+            style="Warning.TButton",
+            command=self.start_edit_expense,
         )
         edit_btn.pack(side=tk.LEFT, padx=(0, 6))
 
-        delete_btn = tk.Button(
+        delete_btn = ttk.Button(
             action_bar,
             text="Delete Selected",
-            bg="#e74c3c",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            command=self.delete_expense
+            style="Danger.TButton",
+            command=self.delete_expense,
         )
         delete_btn.pack(side=tk.LEFT)
 
@@ -449,75 +353,70 @@ class ExpenseTrackerApp:
         self.date_entry.insert(0, date.today().strftime("%Y-%m-%d"))
 
     def update_month_dropdown(self):
-        """Refresh months list from SQLite data."""
-        months = get_available_months()
-        current_m = date.today().strftime("%Y-%m")
-        if current_m not in months:
-            months.insert(0, current_m)
-        if "All" not in months:
-            months.append("All")
+        """Refresh the month filter using months stored in SQLite."""
+        try:
+            months = db.get_available_months()
+        except RuntimeError as exc:
+            messagebox.showerror("Database Error", str(exc))
+            return
+
+        current_month = date.today().strftime("%Y-%m")
+        if current_month not in months:
+            months.insert(0, current_month)
+        months.append("All")
         self.month_dropdown["values"] = months
+
         if self.month_var.get() not in months:
-            self.month_var.set(current_m)
+            self.month_var.set(current_month)
 
     def save_expense(self):
-        """
-        Add a new expense or update an existing one.
-        Demonstrates Exception Handling with try-except blocks.
-        """
-        amount_text = self.amount_entry.get().strip()
-        category = self.category_cb.get().strip()
-        description = self.desc_entry.get().strip()
-        date_text = self.date_entry.get().strip()
-
-        # 1. Validation for Amount
-        if not amount_text:
-            messagebox.showerror("Validation Error", "Please enter an amount.")
-            return
-
+        """Validate form fields, then insert or update an expense."""
         try:
-            amount = float(amount_text)
-            if amount <= 0:
-                messagebox.showerror("Validation Error", "Amount must be greater than zero.")
-                return
-        except ValueError:
-            messagebox.showerror("Validation Error", "Invalid amount. Please enter a valid number (e.g. 150.50).")
+            amount, category, description, expense_date = (
+                calc.validate_expense_inputs(
+                    self.amount_entry.get(),
+                    self.category_cb.get(),
+                    self.desc_entry.get(),
+                    self.date_entry.get(),
+                )
+            )
+        except ValueError as exc:
+            messagebox.showerror("Validation Error", str(exc))
             return
 
-        # 2. Validation for Category
-        if not category:
-            messagebox.showerror("Validation Error", "Please select a category.")
-            return
-
-        # 3. Validation for Date using datetime.strptime
-        if not date_text:
-            messagebox.showerror("Validation Error", "Please enter a date.")
-            return
-
-        try:
-            valid_date_obj = datetime.strptime(date_text, "%Y-%m-%d")
-            valid_date_str = valid_date_obj.strftime("%Y-%m-%d")
-        except ValueError:
-            messagebox.showerror("Validation Error", "Invalid date format. Expected format is YYYY-MM-DD (e.g. 2026-11-17).")
-            return
-
-        # 4. Save to Database (Insert new or Update existing)
         try:
             if self.selected_expense_id is None:
-                # Add new expense
-                add_expense_to_db(amount, category, description, valid_date_str)
-                messagebox.showinfo("Success", f"Expense of Rs. {amount:.2f} added successfully!")
+                db.add_expense(amount, category, description, expense_date)
+                messagebox.showinfo(
+                    "Success",
+                    f"Expense of Rs. {amount:.2f} added successfully!",
+                )
             else:
-                # Update existing expense
-                update_expense_in_db(self.selected_expense_id, amount, category, description, valid_date_str)
-                messagebox.showinfo("Success", f"Expense #{self.selected_expense_id} updated successfully!")
+                updated = db.update_expense(
+                    self.selected_expense_id,
+                    amount,
+                    category,
+                    description,
+                    expense_date,
+                )
+                if not updated:
+                    messagebox.showwarning(
+                        "Expense Not Found",
+                        "This expense no longer exists. Refresh the list and try again.",
+                    )
+                    self.reset_form()
+                    self.load_expenses_and_totals()
+                    return
+                messagebox.showinfo(
+                    "Success",
+                    f"Expense #{self.selected_expense_id} updated successfully!",
+                )
 
             self.reset_form()
             self.update_month_dropdown()
             self.load_expenses_and_totals()
-
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"Failed to save expense: {e}")
+        except RuntimeError as exc:
+            messagebox.showerror("Database Error", str(exc))
 
     def start_edit_expense(self):
         """Loads selected table row into input form for editing."""
@@ -548,37 +447,49 @@ class ExpenseTrackerApp:
 
         # Switch button text and style
         self.form_frame.config(text=f" Editing Expense #{self.selected_expense_id} ")
-        self.submit_btn.config(text="Save Changes", bg="#f39c12")
+        self.submit_btn.config(text="Save Changes", style="Warning.TButton")
 
     def delete_expense(self):
-        """Delete selected expense with user confirmation."""
+        """Delete the selected expense after explicit confirmation."""
         selected_item = self.expense_tree.selection()
         if not selected_item:
-            messagebox.showwarning("Select Item", "Please select an expense row from the table to delete.")
+            messagebox.showwarning(
+                "Select Item",
+                "Please select an expense row from the table to delete.",
+            )
             return
 
         values = self.expense_tree.item(selected_item[0], "values")
         expense_id = int(values[0])
-        exp_cat = values[2]
-        exp_amt = values[4]
+        category = values[2]
+        amount = values[4]
 
-        # Confirm before deletion
         confirm = messagebox.askyesno(
             "Confirm Delete",
-            f"Are you sure you want to delete Expense #{expense_id} ({exp_cat} - Rs. {exp_amt})?"
+            f"Are you sure you want to delete Expense #{expense_id} "
+            f"({category} - Rs. {amount})?",
         )
         if not confirm:
             return
 
         try:
-            delete_expense_from_db(expense_id)
-            if self.selected_expense_id == expense_id:
-                self.reset_form()
-            messagebox.showinfo("Deleted", f"Expense #{expense_id} deleted successfully.")
+            deleted = db.delete_expense(expense_id)
+            if not deleted:
+                messagebox.showwarning(
+                    "Expense Not Found",
+                    "This expense no longer exists. Refresh the list and try again.",
+                )
+            else:
+                if self.selected_expense_id == expense_id:
+                    self.reset_form()
+                messagebox.showinfo(
+                    "Deleted", f"Expense #{expense_id} deleted successfully."
+                )
+
             self.update_month_dropdown()
             self.load_expenses_and_totals()
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"Failed to delete expense: {e}")
+        except RuntimeError as exc:
+            messagebox.showerror("Database Error", str(exc))
 
     def reset_form(self):
         """Clear form and revert back to Add mode."""
@@ -590,143 +501,146 @@ class ExpenseTrackerApp:
         self.date_entry.insert(0, date.today().strftime("%Y-%m-%d"))
 
         self.form_frame.config(text=" Add / Edit Expense ")
-        self.submit_btn.config(text="Add Expense", bg="#27ae60")
+        self.submit_btn.config(text="Add Expense", style="Primary.TButton")
 
     def save_budget(self):
-        """Save monthly budget entered by the student."""
+        """Validate and save a budget for the currently selected month."""
         month = self.month_var.get()
         if not month or month == "All":
-            messagebox.showwarning("Select Month", "Please select a specific month (e.g. 2026-11) to set a budget.")
-            return
-
-        budget_text = self.budget_entry.get().strip()
-        if not budget_text:
-            messagebox.showerror("Input Error", "Please enter a budget amount.")
+            messagebox.showwarning(
+                "Select Month",
+                "Please select a specific month (for example, 2026-11) to set a budget.",
+            )
             return
 
         try:
-            budget = float(budget_text)
-            if budget < 0:
-                messagebox.showerror("Input Error", "Budget cannot be negative.")
-                return
+            budget = calc.validate_budget_input(self.budget_entry.get())
+        except ValueError as exc:
+            messagebox.showerror("Input Error", str(exc))
+            return
 
-            save_budget_to_db(month, budget)
-            messagebox.showinfo("Budget Set", f"Budget for {month} saved as Rs. {budget:,.2f}")
+        try:
+            db.set_budget(month, budget)
+            messagebox.showinfo(
+                "Budget Set",
+                f"Budget for {month} saved as Rs. {budget:,.2f}",
+            )
+            self.update_month_dropdown()
             self.load_expenses_and_totals()
-
-        except ValueError:
-            messagebox.showerror("Input Error", "Please enter a valid numeric budget amount.")
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"Failed to save budget: {e}")
+        except RuntimeError as exc:
+            messagebox.showerror("Database Error", str(exc))
 
     def load_expenses_and_totals(self):
-        """
-        Calculates:
-        1. Total spending for the selected month
-        2. Category-wise totals using a dictionary
-        3. Monthly budget check and warning logic
-        """
+        """Load the selected month's records and display calculated summaries."""
         month = self.month_var.get()
 
-        # 1. Fetch expenses from SQLite
-        expenses = fetch_expenses(month)
+        try:
+            expenses = db.get_all_expenses(month)
+            monthly_budget = (
+                db.get_budget(month) if month and month != "All" else 0.0
+            )
+        except RuntimeError as exc:
+            messagebox.showerror("Database Error", str(exc))
+            return
 
-        # Clear existing table rows
+        # Refresh the expense table.
         for item in self.expense_tree.get_children():
             self.expense_tree.delete(item)
 
-        # Populate table
-        for row in expenses:
-            exp_id, amt, cat, desc, dt = row
-            self.expense_tree.insert("", tk.END, values=(exp_id, dt, cat, desc or "-", f"{amt:.2f}"))
+        for expense in expenses:
+            self.expense_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    expense["id"],
+                    expense["date"],
+                    expense["category"],
+                    expense["description"] or "",
+                    f'{float(expense["amount"]):.2f}',
+                ),
+            )
 
-        self.entries_count_label.config(text=f"{len(expenses)} entries found")
+        self.entries_count_label.config(
+            text=f"{len(expenses)} entries found"
+        )
 
-        # 2. Compute Total Spending and Category-wise Totals using a Dictionary
-        total_spending = 0.0
-        category_totals = {}
+        # All financial calculations live in calculations.py.
+        try:
+            summary = calc.compute_spending_summary(expenses, monthly_budget)
+        except ValueError as exc:
+            messagebox.showerror("Calculation Error", str(exc))
+            return
 
-        for row in expenses:
-            amt = float(row[1])
-            cat = row[2]
-            total_spending += amt
-
-            # Dictionary calculation: count sum per category
-            if cat in category_totals:
-                category_totals[cat] += amt
-            else:
-                category_totals[cat] = amt
-
-        # Update Total Spent Card
+        total_spending = summary["total_spending"]
         self.total_spent_label.config(text=f"Rs. {total_spending:,.2f}")
 
-        # 3. Retrieve and Check Monthly Budget
-        monthly_budget = 0.0
-        if month and month != "All":
-            monthly_budget = get_budget_from_db(month)
-            self.budget_entry.delete(0, tk.END)
-            if monthly_budget > 0:
-                self.budget_entry.insert(0, f"{monthly_budget:.2f}")
+        # Reset the input before displaying the selected month's budget.
+        self.budget_entry.delete(0, tk.END)
 
-        # Update Budget Card
         if monthly_budget > 0:
+            self.budget_entry.insert(0, f"{monthly_budget:.2f}")
             self.budget_label.config(text=f"Rs. {monthly_budget:,.2f}")
-            difference = monthly_budget - total_spending
-
-            if total_spending > monthly_budget:
-                # Exceeded Budget Warning!
-                overspent = total_spending - monthly_budget
-                self.status_title_label.config(text="OVER BUDGET BY", fg="#c0392b")
-                self.balance_label.config(text=f"Rs. {overspent:,.2f}", fg="#c0392b")
-
-                self.warning_banner.config(
-                    text=f"WARNING: Monthly spending of Rs. {total_spending:,.2f} exceeds your budget of Rs. {monthly_budget:,.2f} by Rs. {overspent:,.2f}!",
-                    bg="#fadbd8",
-                    fg="#922b21"
-                )
-            else:
-                # Within Budget
-                self.status_title_label.config(text="REMAINING BUDGET", fg="#27ae60")
-                self.balance_label.config(text=f"Rs. {difference:,.2f}", fg="#27ae60")
-
-                if monthly_budget > 0 and total_spending >= monthly_budget * 0.9:
-                    self.warning_banner.config(
-                        text=f"Caution: You have spent {(total_spending/monthly_budget)*100:.1f}% of your budget.",
-                        bg="#fdebd0",
-                        fg="#b9770e"
-                    )
-                else:
-                    self.warning_banner.config(
-                        text=f"Budget Healthy: Rs. {difference:,.2f} remaining for this month.",
-                        bg="#d5f5e3",
-                        fg="#1e8449"
-                    )
         else:
             self.budget_label.config(text="Not Set")
+
+        budget_status = summary["budget_status"]
+        if budget_status == "exceeded":
+            exceeded_by = summary["exceeded_by"]
+            self.status_title_label.config(text="OVER BUDGET BY", fg="#c0392b")
+            self.balance_label.config(
+                text=f"Rs. {exceeded_by:,.2f}", fg="#c0392b"
+            )
+            self.warning_banner.config(
+                text=summary["warning_message"],
+                bg="#fadbd8",
+                fg="#922b21",
+            )
+        elif budget_status == "caution":
+            remaining = summary["difference"]
+            self.status_title_label.config(
+                text="REMAINING BUDGET", fg="#b9770e"
+            )
+            self.balance_label.config(
+                text=f"Rs. {remaining:,.2f}", fg="#b9770e"
+            )
+            self.warning_banner.config(
+                text=summary["warning_message"],
+                bg="#fdebd0",
+                fg="#b9770e",
+            )
+        elif budget_status == "healthy":
+            remaining = summary["difference"]
+            self.status_title_label.config(
+                text="REMAINING BUDGET", fg="#27ae60"
+            )
+            self.balance_label.config(
+                text=f"Rs. {remaining:,.2f}", fg="#27ae60"
+            )
+            self.warning_banner.config(
+                text=summary["warning_message"],
+                bg="#d5f5e3",
+                fg="#1e8449",
+            )
+        else:
             self.status_title_label.config(text="REMAINING", fg="#7f8c8d")
             self.balance_label.config(text="N/A", fg="#7f8c8d")
             self.warning_banner.config(
-                text="No budget set for this month. Set a budget on the left to monitor spending.",
+                text=summary["warning_message"],
                 bg="#f2f3f4",
-                fg="#7f8c8d"
+                fg="#7f8c8d",
             )
 
-        # 4. Populate Category-wise Totals Tab
+        # Display the category-wise totals returned by calculations.py.
         for item in self.category_tree.get_children():
             self.category_tree.delete(item)
 
-        # Sort categories by highest spending first
-        sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
-        for cat, total in sorted_categories:
-            percentage = (total / total_spending * 100) if total_spending > 0 else 0
-            self.category_tree.insert("", tk.END, values=(cat, f"Rs. {total:,.2f}", f"{percentage:.1f}%"))
-
-
-# ------------------------------------------------------------------------------
-# 3. PROGRAM ENTRY POINT
-# ------------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = ExpenseTrackerApp(root)
-    root.mainloop()
+        for row in summary["category_breakdown"]:
+            self.category_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    row["category"],
+                    f'Rs. {row["total"]:,.2f}',
+                    f'{row["percentage"]:.1f}%',
+                ),
+            )
