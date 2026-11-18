@@ -1,85 +1,90 @@
-# Student Personal Expense Tracker 💰
+# Student Personal Expense Tracker
 
-A desktop GUI application built in Python using **Tkinter**, **SQLite**, and the **datetime** module. Designed to help students record everyday expenses, monitor category spending, and maintain a monthly budget with visual alert warnings.
+A desktop application built with Python, Tkinter, and SQLite. It helps students
+record everyday expenses, review monthly spending, and monitor a monthly budget.
 
----
+## Assignment requirements
 
-## 🌟 Features & Requirements Satisfied
+This project addresses Problem 4: Personal Expense Tracker.
 
-1. **Add Expenses**:
-   - Fields: Amount (₹), Category (Dropdown), Short Description, and Date (`YYYY-MM-DD`).
-   - Quick **"Today"** button to auto-fill today's date.
-   - Comprehensive validation to prevent negative amounts, empty categories, or invalid calendar dates.
+1. **Add expenses:** Record an amount, category, short description, and date.
+2. **View expenses:** Display saved entries in a table and filter by month.
+3. **Edit and delete:** Select an existing entry to update it or delete it after confirmation.
+4. **Monthly calculations:** Calculate total spending and category-wise totals for the selected month.
+5. **Monthly budget:** Save a budget for a selected month and display a warning when spending reaches 90% or exceeds the budget.
 
-2. **View Saved Expenses**:
-   - Multi-column `ttk.Treeview` table with ID, Date, Category, Description, and formatted Amount.
-   - Scrollbar support for smooth navigation through long lists.
-   - Filter by month or view all recorded expenses.
+## Python concepts demonstrated
 
-3. **Edit & Delete Records**:
-   - **Edit**: Select an entry and click **✏️ Edit Selected** to populate the form, switch to Edit mode, and update the entry.
-   - **Delete**: Select an entry and click **🗑️ Delete Selected** with safety confirmation dialogs.
+- Tkinter widgets and event-driven GUI programming
+- SQLite database creation, queries, and CRUD operations
+- `datetime` for date defaults and validation
+- Dictionaries for category-wise expense aggregation
+- Functions, modules, and separation of concerns
+- Exception handling and automated unit tests
 
-4. **Spending Calculations & Category-Wise Breakdown**:
-   - Real-time KPI summary cards displaying Total Spending, Monthly Budget, and Remaining Budget.
-   - Dedicated **Category Breakdown tab** displaying total expenditure per category and percentage share.
-   - Computed using Python dictionaries for grouping and aggregation.
+## Features
 
-5. **Monthly Budget & Warning System**:
-   - Set monthly budgets stored directly in the database.
-   - Dynamic alert banners:
-     - 🔴 **Red Banner (Alert)**: Displayed when total spending exceeds the budget, showing the exact amount overspent.
-     - 🟡 **Yellow Banner (Caution)**: Displayed when spending reaches 90% or more of the budget.
-     - 🟢 **Green Banner (Healthy)**: Displayed when spending is comfortably within budget.
+- Add, view, edit, and delete expenses.
+- Filter entries by month or view all recorded expenses.
+- Review total spending and category-wise totals and percentages.
+- Set and persist a budget for each month.
+- Display healthy, caution (90% or more used), and over-budget warnings.
+- Validate expense amounts, categories, dates, and budget inputs.
 
-6. **Bonus: CSV Export**:
-   - Export filtered or all expenses to a `.csv` file with a single click.
+CSV export is not included in this version.
 
----
+## Project structure
 
-## 📁 Project Structure
+Expense-Tracker/
+├── main.py                  # Application entry point
+├── expense_tracker.py       # Tkinter interface and event handlers
+├── database.py              # SQLite schema and data operations
+├── calculations.py          # Input validation and spending calculations
+├── seed_data.py              # Optional sample data for demonstrations
+├── test_expense_tracker.py  # Automated tests
+├── .gitignore
+└── README.md
 
-```text
-expense_tracker/
-├── main.py                   # Main Tkinter GUI application
-├── database.py               # SQLite database setup and CRUD operations
-├── calculations.py           # Business logic, dictionary aggregations, & validation
-├── seed_data.py              # Script to populate sample student expenses for demo
-├── test_expense_tracker.py   # Unit test suite verifying all logic
-├── VIVA_GUIDE.md             # Complete Viva Voce answers and explanation guide
-└── README.md                 # Project documentation and instructions
-```
+## Requirements
 
----
+- Python 3.10 or later
+- Tkinter (normally included with standard Python distributions)
+- SQLite (included with Python's `sqlite3` module)
 
-## 🚀 How to Run the Application
+No third-party Python packages are required.
 
-### 1. Requirements
-- Python 3.10+ (Python 3.14 recommended, standard library only - no external pip packages required).
+## Run the application
 
-### 2. Run the Application
-Open a terminal in the project directory:
-```bash
+Open a terminal in the project directory and run:
+
 python main.py
-```
 
-### 3. (Optional) Populate Sample Demo Data
-To test with sample student expenses (books, cafeteria, hostel rent, etc.):
-```bash
+On first launch, the application creates `expenses.db` and the required tables
+beside the Python source files. The database starts empty; sample records are
+not inserted automatically.
+
+## Optional demonstration data
+
+To populate a new or empty database with sample student expenses and a sample
+monthly budget, run:
+
 python seed_data.py
 python main.py
-```
 
-### 4. Run Automated Unit Tests
-```bash
-python test_expense_tracker.py
-```
+The seed script will not add duplicate sample records when expenses already
+exist. The sample dates are generated for the current month.
 
----
+## Run automated tests
 
-## 📚 Viva Preparation
-See the full Viva Preparation Guide in [`VIVA_GUIDE.md`](VIVA_GUIDE.md) covering:
-- How expense totals are computed.
-- How budget warnings are computed.
-- How saved entries are updated.
-- Detailed breakdown of all six course concepts.
+python -m unittest -v
+
+The tests use temporary SQLite databases and do not modify the application's
+`expenses.db`.
+
+## Database and generated files
+
+`expenses.db` is created locally when the application is first run. It is not
+required to be committed to Git: every group member can generate their own
+database by running the application. Use `seed_data.py` when a shared
+demonstration dataset is needed. Python cache files and local databases are
+excluded through `.gitignore`.
