@@ -1,16 +1,16 @@
-# ==============================================================================
-# Course Assignment - Problem 4: Personal Expense Tracker
-# Group Project (Marks: 20)
-# Concepts demonstrated: Tkinter widgets, SQLite, datetime, dictionaries, calculations, exception handling
-# ==============================================================================
+"""
+main.py - Application entry point for Personal Expense Tracker.
+"""
 
 import tkinter as tk
 from expense_tracker import ExpenseTrackerApp
 
-def main():
+
+def main() -> None:
     root = tk.Tk()
-    app = ExpenseTrackerApp(root)
+    ExpenseTrackerApp(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
